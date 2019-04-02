@@ -1,8 +1,11 @@
-from flask import Flask, render_template, request, json
+from flask import Flask, render_template, request, json, session, url_for, redirect,  escape
 import pymysql
 from werkzeug import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+
+
+class ServerError(Exception): pass
 
 
 @app.route("/")
@@ -50,6 +53,55 @@ def signUp():
         cursor.close()
         conn.close()
 
+
+@app.route('/showLogin')
+def showLogin():
+    return render_template('login.html')
+
+
+@app.route('/login', methods=['POST', 'GET'])
+def login():
+    conn = pymysql.connect(host='127.0.0.1', user='root', passwd='Gareth123!', db='BucketList')
+    cursor = conn.cursor()
+    if 'username' in session:
+        return redirect(url_for('index'))
+
+    error = None
+    try:
+        if request.method == 'POST':
+            username_form = "\"{}\"".format(request.form['username'])
+            cursor.execute("SELECT COUNT(1) FROM tbl_user WHERE user_username = {};".format(username_form))
+
+            if not cursor.fetchone()[0]:
+                return json.dumps({'html': '<span>Invalid Username</span>'})
+                # raise ServerError('Invalid username')
+
+            # password_form = "\"{}\"".format(request.form['password'])
+            password_form = request.form['password']
+            cursor.execute("SELECT user_password FROM tbl_user WHERE user_username = {};".format(username_form))
+
+            for row in cursor.fetchall():
+                if check_password_hash(row[0], password_form):
+                    session['username'] = request.form['username']
+                    return redirect(url_for('index'))
+
+            # raise ServerError('Invalid password')
+            return json.dumps({'html': '<span>Invalid Password</span>'})
+    # except ServerError as e:
+    except Exception as e:
+        # error = str(e)
+        return json.dumps({'error': str(e)})
+    finally:
+        cursor.close()
+        conn.close()
+
+    # return render_template('login.html')
+
+
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    return redirect(url_for('index'))
 
 if __name__ == "__main__":
     app.run(port=5000)
